@@ -4,75 +4,84 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class Server implements Runnable {
-    final List<String> validPaths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html", "/events.html", "/events.js");
-    private final Socket socket;
-    private final BufferedReader in;
-    private final BufferedOutputStream out;
+public class Server extends Thread {
+    private final static ConcurrentHashMap<String, HashMap<String, Handler>> availableHandlers = new ConcurrentHashMap<>();
+    private final ExecutorService threadPoll = Executors.newFixedThreadPool(64);
 
-    public Server(Socket socket) throws IOException {
-        this.socket = socket;
-        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        out = new BufferedOutputStream(socket.getOutputStream());
-        run();
+    public Server() {
     }
 
+    // Поток подключений.
     @Override
     public void run() {
-        try {
-            final var requestLine = in.readLine();
-            final var parts = requestLine.split(" ");
-            if (parts.length != 3) {
-                // just close socket
-                socket.close();
+        try (final var serverSocket = new ServerSocket(9999)) {
+            while (true) {
+                Socket socket = serverSocket.accept();
+                threadPoll.execute(newConnection(socket));
             }
-            final var path = parts[1];
-            if (!validPaths.contains(path)) {
-                out.write((
-                        "HTTP/1.1 404 Not Found\r\n" +
-                                "Content-Length: 0\r\n" +
-                                "Connection: close\r\n" +
-                                "\r\n"
-                ).getBytes());
-                out.flush();
-            }
-            final var filePath = Path.of(".", "public", path);
-            final var mimeType = Files.probeContentType(filePath);
-            // special case for classic
-            if (path.equals("/classic.html")) {
-                final var template = Files.readString(filePath);
-                final var content = template.replace(
-                        "{time}",
-                        LocalDateTime.now().toString()
-                ).getBytes();
-                out.write((
-                        "HTTP/1.1 200 OK\r\n" +
-                                "Content-Type: " + mimeType + "\r\n" +
-                                "Content-Length: " + content.length + "\r\n" +
-                                "Connection: close\r\n" +
-                                "\r\n"
-                ).getBytes());
-                out.write(content);
-                out.flush();
-            }
-            final var length = Files.size(filePath);
-            out.write((
-                    "HTTP/1.1 200 OK\r\n" +
-                            "Content-Type: " + mimeType + "\r\n" +
-                            "Content-Length: " + length + "\r\n" +
-                            "Connection: close\r\n" +
-                            "\r\n"
-            ).getBytes());
-            Files.copy(filePath, out);
-            out.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
+    //Обработка запроса.
+    public Runnable newConnection(Socket socket) throws IOException {
+        var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        var out = new BufferedOutputStream(socket.getOutputStream());
+        return new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final var requestLine = in.readLine();
+                    final var parts = requestLine.split(" ");
+
+                    if (parts.length != 3) {
+                        // just close socket
+                        socket.close();
+                    }
+                    // проверить правильность запроса, что бы не заводить лишние объекты.
+                    Request request = new Request(parts);
+
+                    if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
+                        out.write((
+                                "HTTP/1.1 404 Not Found\r\n" +
+                                        "Content-Length: 0\r\n" +
+                                        "Connection: close\r\n" +
+                                        "\r\n"
+                        ).getBytes());
+                        out.flush();
+                    }
+                    availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+    }
+
+    // Добавление расширения.
+    public void addHandler(String method, String path, Handler handler) {
+        HashMap<String, Handler> map = new HashMap<>();
+        map.put(path, handler);
+        availableHandlers.put(method, map);
+    }
+
+    //Добавление однотипных расширений.
+    public void addListOfPathWithOneHandler(String method, List<String> paths, Handler handler) {
+        HashMap<String, Handler> map = new HashMap<>();
+        for (String path : paths) {
+            map.put(path, handler);
+        }
+        availableHandlers.put(method, map);
+    }
+
 }
