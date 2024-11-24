@@ -19,6 +19,26 @@ public class Server extends Thread {
     public Server() {
     }
 
+    private static void badRequest(BufferedOutputStream out) throws IOException {
+        out.write((
+                "HTTP/1.1 400 Bad Request\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "Connection: close\r\n" +
+                        "\r\n"
+        ).getBytes());
+        out.flush();
+    }
+
+    private static void notFound(BufferedOutputStream out) throws IOException {
+        out.write((
+                "HTTP/1.1 404 Not Found\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "Connection: close\r\n" +
+                        "\r\n"
+        ).getBytes());
+        out.flush();
+    }
+
     // Поток подключений.
     @Override
     public void run() {
@@ -40,24 +60,12 @@ public class Server extends Thread {
             @Override
             public void run() {
                 try {
-                    final var requestLine = in.readLine();
-                    final var parts = requestLine.split(" ");
-
-                    if (parts.length != 3) {
-                        // just close socket
-                        socket.close();
-                    }
-                    // проверить правильность запроса, что бы не заводить лишние объекты.
-                    Request request = new Request(parts);
+                    String[] input = in.readLine().split(" ");
+                    if (input.length != 3) badRequest(out);
+                    Request request = new Request(input);
 
                     if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
-                        out.write((
-                                "HTTP/1.1 404 Not Found\r\n" +
-                                        "Content-Length: 0\r\n" +
-                                        "Connection: close\r\n" +
-                                        "\r\n"
-                        ).getBytes());
-                        out.flush();
+                        notFound(out);
                     }
                     availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
 
