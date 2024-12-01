@@ -55,7 +55,7 @@ public class Server extends Thread {
         return requestLine;
     }
 
-    private static String getHeaders(byte[] buffer, int read, BufferedInputStream in, BufferedOutputStream out) throws IOException {
+    private static void setHeadersAndBody(byte[] buffer, int read, BufferedInputStream in, BufferedOutputStream out, Request request) throws IOException {
         final var requestLineDelimiter = new byte[]{'\r', '\n'};
         final var requestLineEnd = indexOf(buffer, requestLineDelimiter, 0, read);
         final var headersDelimiter = new byte[]{'\r', '\n', '\r', '\n'};
@@ -72,9 +72,24 @@ public class Server extends Thread {
 
         final var headersBytes = in.readNBytes(headersEnd - headersStart);
         final var headers = new String(headersBytes);
-        System.out.println(headers);
-        return headers;
+        // Вносим заголовки.
+        request.setHeaders(headers);
+
+        if (!request.getMethod().equals("GET")) {
+            in.skip(headersDelimiter.length);
+            // вычитываем Content-Length, чтобы прочитать body
+            final var contentLength = request.getHeader("Content-Length");
+            if (contentLength.isPresent()) {
+                final var length = Integer.parseInt(contentLength.get().getValue());
+                final var bodyBytes = in.readNBytes(length);
+
+                final var body = new String(bodyBytes);
+                // Вносим тело.
+                request.setBody(body);
+            }
+        }
     }
+
 
     private static int indexOf(byte[] array, byte[] target, int start, int max) {
         outer:
@@ -109,30 +124,32 @@ public class Server extends Thread {
         return new Runnable() {
             @Override
             public void run() {
-                try {
-                    final var limit = 4096;
+                while (true) {
+                    try {
+                        final var limit = 4096;
 
-                    in.mark(limit);
-                    final var buffer = new byte[limit];
-                    final var read = in.read(buffer);
+                        in.mark(limit);
+                        final var buffer = new byte[limit];
+                        final var read = in.read(buffer);
 
-                    Request request = new Request(getRequestLine(buffer, read, out), getHeaders(buffer, read, in, out));
+                        Request request = new Request(getRequestLine(buffer, read, out));
+                        setHeadersAndBody(buffer, read, in, out, request);
 
-                    if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
+                        if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
 //                        notFound(out);
-                        out.write((
-                                "HTTP/1.1 200 OK\r\n" +
-                                        "Content-Length: 0\r\n" +
-                                        "Connection: close\r\n" +
-                                        "\r\n"
-                        ).getBytes());
-                        out.flush();
-                        System.out.println();
-                    }
-                    availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
+                            out.write((
+                                    "HTTP/1.1 200 OK\r\n" +
+                                            "Content-Length: 0\r\n" +
+                                            "Connection: close\r\n" +
+                                            "\r\n"
+                            ).getBytes());
+                            out.flush();
+                        }
+                        availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
 
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         };

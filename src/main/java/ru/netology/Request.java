@@ -10,10 +10,11 @@ import java.util.Optional;
 public class Request {
     private final String method;
     private final String path;
+    private List<NameValuePair> headers;
     private List<NameValuePair> queryParams;
-    private final List<NameValuePair> headers;
+    private String body;
 
-    public Request(String[] requestLine, String headersString) {
+    public Request(String[] requestLine) {
         this.method = requestLine[0];
         if (!requestLine[1].contains("?")) {
             this.path = requestLine[1];
@@ -22,11 +23,17 @@ public class Request {
             this.path = requestLine[1].substring(0, queryStringBegin);
             this.queryParams = URLEncodedUtils.parse(requestLine[1].substring(queryStringBegin + 1), Charset.defaultCharset());
         }
-        this.headers = URLEncodedUtils.parse(headersString, Charset.defaultCharset());
-
         System.out.println(getMethod());
         System.out.println(queryParams);
+    }
+    public void setHeaders (String headers){
+        this.headers = URLEncodedUtils.parse(headers, Charset.defaultCharset());
         System.out.println(headers);
+    }
+
+    public void setBody (String body){
+        this.body = body;
+        System.out.println(body);
     }
 
     public Optional<NameValuePair> getQueryParam(String name) {
@@ -34,6 +41,7 @@ public class Request {
                 .filter(o -> o.getName().equals(name))
                 .findAny();
     }
+
     public Optional<NameValuePair> getHeader(String name) {
         return headers.stream()
                 .filter(o -> o.getName().equals(name))
@@ -43,6 +51,7 @@ public class Request {
     public List<NameValuePair> getHeaders() {
         return headers;
     }
+
     public List<NameValuePair> getQueryParams() {
         return queryParams;
     }
