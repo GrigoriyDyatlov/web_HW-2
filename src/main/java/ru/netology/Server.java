@@ -54,26 +54,18 @@ public class Server extends Thread {
 
     //Обработка запроса.
     public Thread newConnection(Socket socket) throws IOException {
-        final var in = new BufferedInputStream(socket.getInputStream());
-        final var out = new BufferedOutputStream(socket.getOutputStream());
-        return new Thread(() -> {
-            try {
-                Request request = new Request(in, out);
-                if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
-//                        notFound(out);
-                    out.write((
-                            "HTTP/1.1 200 OK\r\n" +
-                                    "Content-Length: 0\r\n" +
-                                    "Connection: close\r\n" +
-                                    "\r\n"
-                    ).getBytes());
-                    out.flush();
-                }
-                availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
 
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        return new Thread(() -> {
+                try (final var in = new BufferedInputStream(socket.getInputStream());
+                     final var out = new BufferedOutputStream(socket.getOutputStream())) {
+                    Request request = new Request(in, out);
+                    if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
+                        notFound(out);
+                    }
+                    availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
         });
     }
 

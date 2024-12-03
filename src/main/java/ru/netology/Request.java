@@ -1,22 +1,24 @@
 package ru.netology;
 
+import com.sun.net.httpserver.Headers;
+import org.apache.commons.fileupload.FileItemFactory;
 import org.apache.commons.fileupload.FileUpload;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
+
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+
 
 
 public class Request {
     private final String method;
     private final String path;
-    private final List<NameValuePair> headers;
+    private List<String> headers;
     private List<NameValuePair> queryParams;
     private String body;
 
@@ -45,9 +47,11 @@ public class Request {
         } else {
             int queryStringBegin = requestLine[1].indexOf("?");
             this.path = requestLine[1].substring(0, queryStringBegin);
-            this.queryParams = URLEncodedUtils.parse(requestLine[1].substring(queryStringBegin + 1), Charset.defaultCharset());
+            this.queryParams = URLEncodedUtils.parse(requestLine[1].substring(queryStringBegin + 1)
+                    , Charset.defaultCharset());
             System.out.println(queryParams);
         }
+        FileUpload fileUpload = new FileUpload();
         //search headers
         final var headersDelimiter = new byte[]{'\r', '\n', '\r', '\n'};
         final var headersStart = requestLineEnd + requestLineDelimiter.length;
@@ -55,23 +59,28 @@ public class Request {
         if (headersEnd == -1) {
             badRequest(out);
         }
+
         // отматываем на начало буфера
         in.reset();
         // пропускаем requestLine
         in.skip(headersStart);
 
         final var headersBytes = in.readNBytes(headersEnd - headersStart);
-        final var headers = new String(headersBytes);
+        this.headers = Arrays.asList(new String(headersBytes).split("\r\n"));
 
-        this.headers = URLEncodedUtils.parse(headers, Charset.defaultCharset());
+        System.out.println(getHeaders());
+        System.out.println(getHeader("Content-Length"));
         if (!method.equals("GET")) {
             in.skip(headersDelimiter.length);
-            // вычитываем Content-Length, чтобы прочитать body
-                final var length = Integer.parseInt(getHeader("Content-Length").get().getValue());
-                final var bodyBytes = in.readNBytes(length);
-
-                final var body = new String(bodyBytes);
-                this.body = body;
+//             вычитываем Content-Length, чтобы прочитать body
+            var contentLength = getHeader("Content-Length");
+            System.out.println(contentLength);
+               if (getHeader("Content-Length").isPresent()) {
+                   final var length = Integer.parseInt(contentLength.get());
+                   final var bodyBytes = in.readNBytes(length);
+                   final var body = new String(bodyBytes);
+                   this.body = body;
+               }
         }
         System.out.println(method);
         System.out.println(path);
@@ -109,13 +118,15 @@ public class Request {
                 .findFirst();
     }
 
-    public Optional<NameValuePair> getHeader(String name) {
+    public Optional<String> getHeader(String name) {
         return headers.stream()
-                .filter(o -> o.getName().equals(name))
+                .filter(o -> o.startsWith(name))
+                .map(o -> o.substring(o.indexOf(" ")))
+                .map(String::trim)
                 .findFirst();
     }
 
-    public List<NameValuePair> getHeaders() {
+    public List<String> getHeaders() {
         return headers;
     }
 
