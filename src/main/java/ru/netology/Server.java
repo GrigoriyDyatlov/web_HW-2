@@ -56,16 +56,16 @@ public class Server extends Thread {
     public Thread newConnection(Socket socket) throws IOException {
 
         return new Thread(() -> {
-                try (final var in = new BufferedInputStream(socket.getInputStream());
-                     final var out = new BufferedOutputStream(socket.getOutputStream())) {
-                    Request request = new Request(in, out);
-                    if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
-                        notFound(out);
-                    }
-                    availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
-                } catch (IOException e) {
-                    e.printStackTrace();
+            try (final var in = new BufferedInputStream(socket.getInputStream());
+                 final var out = new BufferedOutputStream(socket.getOutputStream())) {
+                Request request = new Request(in, out);
+                if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
+                    notFound(out);
                 }
+                availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         });
     }
 

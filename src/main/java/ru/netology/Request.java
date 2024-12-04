@@ -1,24 +1,22 @@
 package ru.netology;
 
-import com.sun.net.httpserver.Headers;
-import org.apache.commons.fileupload.FileItemFactory;
 import org.apache.commons.fileupload.FileUpload;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
-
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.*;
-
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
 
 public class Request {
     private final String method;
     private final String path;
-    private List<String> headers;
+    private final List<String> headers;
     private List<NameValuePair> queryParams;
     private String body;
 
@@ -49,7 +47,6 @@ public class Request {
             this.path = requestLine[1].substring(0, queryStringBegin);
             this.queryParams = URLEncodedUtils.parse(requestLine[1].substring(queryStringBegin + 1)
                     , Charset.defaultCharset());
-            System.out.println(queryParams);
         }
         FileUpload fileUpload = new FileUpload();
         //search headers
@@ -59,7 +56,6 @@ public class Request {
         if (headersEnd == -1) {
             badRequest(out);
         }
-
         // отматываем на начало буфера
         in.reset();
         // пропускаем requestLine
@@ -68,19 +64,17 @@ public class Request {
         final var headersBytes = in.readNBytes(headersEnd - headersStart);
         this.headers = Arrays.asList(new String(headersBytes).split("\r\n"));
 
-        System.out.println(getHeaders());
-        System.out.println(getHeader("Content-Length"));
         if (!method.equals("GET")) {
             in.skip(headersDelimiter.length);
 //             вычитываем Content-Length, чтобы прочитать body
             var contentLength = getHeader("Content-Length");
             System.out.println(contentLength);
-               if (getHeader("Content-Length").isPresent()) {
-                   final var length = Integer.parseInt(contentLength.get());
-                   final var bodyBytes = in.readNBytes(length);
-                   final var body = new String(bodyBytes);
-                   this.body = body;
-               }
+            if (getHeader("Content-Length").isPresent()) {
+                final var length = Integer.parseInt(contentLength.get());
+                final var bodyBytes = in.readNBytes(length);
+                final var body = new String(bodyBytes);
+                this.body = body;
+            }
         }
         System.out.println(method);
         System.out.println(path);
