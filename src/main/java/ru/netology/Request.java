@@ -1,26 +1,30 @@
 package ru.netology;
 
-import org.apache.commons.fileupload.FileUpload;
+import org.apache.commons.fileupload.*;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 
-public class Request {
+public class Request implements RequestContext {
     private final String method;
     private final String path;
     private final List<String> headers;
     private List<NameValuePair> queryParams;
     private String body;
+    protected BufferedInputStream in;
+    protected BufferedOutputStream out;
+    protected final String repository = "C:\\DyatlovGM\\web_HW-2\\public";
 
-    public Request(BufferedInputStream in, BufferedOutputStream out) throws IOException {
+    public Request(BufferedInputStream in, BufferedOutputStream out) throws Exception {
+        this.in = in;
+        this.out = out;
+
         final var limit = 4096;
 
         in.mark(limit);
@@ -74,8 +78,10 @@ public class Request {
                 final var bodyBytes = in.readNBytes(length);
                 final var body = new String(bodyBytes);
                 this.body = body;
+                uploadFile();
             }
         }
+
         System.out.println(method);
         System.out.println(path);
         System.out.println(queryParams);
@@ -134,5 +140,46 @@ public class Request {
 
     public String getPath() {
         return path;
+    }
+
+    public void uploadFile() throws Exception {
+        DiskFileItemFactory factory = new DiskFileItemFactory();
+        factory.setSizeThreshold(100);
+        factory.setRepository(new File("temp"));
+
+        ServletFileUpload upload = new ServletFileUpload(factory);
+        List<FileItem> items = upload.parseRequest(this);
+
+        Iterator<FileItem> iter = items.iterator();
+        while (iter.hasNext()) {
+            FileItem item = iter.next();
+            if (!item.isFormField()) {
+                String fieldName = item.getFieldName();
+                String fileName = item.getName();
+                String contentType = item.getContentType();
+               item.write(new File(repository, fileName));
+            }
+        }
+    }
+
+    @Override
+    public String getCharacterEncoding() {
+        return body;
+    }
+
+    @Override
+    public String getContentType() {
+        return String.valueOf(getHeader("Content-Type"));
+    }
+
+    @Override
+    public int getContentLength() {
+        var contentLength = getHeader("Content-Length");
+        return Integer.parseInt(contentLength.get());
+    }
+
+    @Override
+    public InputStream getInputStream() throws IOException {
+        return in;
     }
 }

@@ -65,6 +65,8 @@ public class Server extends Thread {
                 availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
             } catch (IOException e) {
                 e.printStackTrace();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         });
     }
