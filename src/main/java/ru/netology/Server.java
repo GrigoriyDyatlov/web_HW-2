@@ -1,9 +1,8 @@
 package ru.netology;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
@@ -39,6 +38,7 @@ public class Server extends Thread {
         out.flush();
     }
 
+
     // Поток подключений.
     @Override
     public void run() {
@@ -53,27 +53,22 @@ public class Server extends Thread {
     }
 
     //Обработка запроса.
-    public Runnable newConnection(Socket socket) throws IOException {
-        var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        var out = new BufferedOutputStream(socket.getOutputStream());
-        return new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String[] input = in.readLine().split(" ");
-                    if (input.length != 3) badRequest(out);
-                    Request request = new Request(input);
+    public Thread newConnection(Socket socket) throws IOException {
 
-                    if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
-                        notFound(out);
-                    }
-                    availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
-
-                } catch (IOException e) {
-                    e.printStackTrace();
+        return new Thread(() -> {
+            try (final var in = new BufferedInputStream(socket.getInputStream());
+                 final var out = new BufferedOutputStream(socket.getOutputStream())) {
+                Request request = new Request(in, out);
+                if (!availableHandlers.containsKey(request.getMethod()) || !availableHandlers.get(request.getMethod()).containsKey(request.getPath())) {
+                    notFound(out);
                 }
+                availableHandlers.get(request.getMethod()).get(request.getPath()).handle(request, out);
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-        };
+        });
     }
 
     // Добавление расширения.
